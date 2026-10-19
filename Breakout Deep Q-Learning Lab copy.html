@@ -1,0 +1,166 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>Breakout Deep Q-Learning Lab</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+<style>
+:root{--bg:#0f1226;--card:#1a1f3d;--ink:#e8ebff;--mut:#9aa3d6;--a:#7c5cff;--b:#22d3ee;--c:#fbbf24;--d:#f43f5e;--g:#34d399;--line:#2e3566;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1226;--card:#1a1f3d;--ink:#e8ebff;--mut:#9aa3d6;--line:#2e3566}}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#eef0ff;--card:#fff;--ink:#1b1f3b;--mut:#515a8a;--line:#d3d8f3;color-scheme:light}}
+:root[data-theme="dark"]{--bg:#0f1226;--card:#1a1f3d;--ink:#e8ebff;--mut:#9aa3d6;--line:#2e3566}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:12px;min-height:100%}
+h1{margin:4px 0;font-size:26px;background:linear-gradient(90deg,var(--a),var(--b),var(--g));-webkit-background-clip:text;background-clip:text;color:transparent}h2{margin:0 0 8px;font-size:17px}
+.sub{color:var(--mut);margin:0 0 10px}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+canvas{width:100%;height:auto;border-radius:10px;display:block;background:#0b0e24}
+button{font:inherit;font-weight:600;border:0;border-radius:9px;padding:8px 12px;margin:3px 3px 3px 0;color:#fff;background:var(--a);cursor:pointer}button.s{background:var(--b);color:#06222b}button.w{background:var(--d)}button.o{background:var(--c);color:#3a2a00}button.on{outline:3px solid var(--g)}
+.mono{font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;background:rgba(124,92,255,.12);border-radius:8px;padding:8px;white-space:pre-wrap;overflow-x:auto}
+.pipe{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}.pipe span{font-size:12px;padding:4px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mut);transition:.15s}.pipe span.on{background:var(--g);color:#052b1e;border-color:var(--g);font-weight:700}
+.par{margin:8px 0}.par label{display:flex;justify-content:space-between;font-weight:600}.par input{width:100%}small{color:var(--mut);display:block}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px}.tiles div{background:rgba(124,92,255,.14);border-radius:10px;padding:6px 10px}.tiles b{display:block;font-size:19px}
+.charts{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+input[type=number]{width:70px;font:inherit;padding:4px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+details{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0}summary{cursor:pointer;font-weight:600}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+</style></head><body>
+<h1>Breakout Deep Q-Learning Lab</h1>
+<p class="sub">Watch a real neural network (TensorFlow.js) learn Breakout by trial and error. Everything you see is computed live in your browser.</p>
+<div><button id="m1">Round 1: Human plays</button><button id="m2" class="on">Round 2: AI learns</button></div>
+<div class="grid">
+<div class="card"><h2>🎮 Breakout</h2><canvas id="gc" width="400" height="300"></canvas><div class="mono" id="st"></div></div>
+<div class="card"><h2>🧠 The Deep Q-Network</h2><canvas id="nc" width="600" height="290"></canvas>
+<small>Brightness = how active a neuron is. Green/red lines = positive/negative connection weights. Showing 16 of 24 neurons per hidden layer.</small>
+<div class="pipe" id="pipe"></div><div class="mono" id="narr">Press “Step (explain)” to see each stage of learning one at a time.</div></div>
+</div>
+<div class="grid">
+<div class="card" id="r1" style="display:none"><h2>Round 1: You are the player</h2>
+<p>Use ← and → to move the paddle (no key = STAY). Each moment is an <b>experience</b>: what the AI would see (state), what you did (action), and what happened (reward). The AI can learn from many such experiences.</p>
+<div class="mono" id="log">Waiting for you to play…</div><button class="s" id="teach">Teach the AI with my experiences</button><small id="tmsg"></small></div>
+<div class="card" id="r2"><h2>Round 2: The AI learns</h2>
+<button id="bwatch">▶ Watch &amp; learn</button><button class="s" id="bstep">⏭ Step (explain)</button><button class="s" id="b1g">🎬 Watch 1 game</button><button id="b100">🚀 Train 100</button><button id="b1000">🚀 Train 1000</button><button class="o" id="btest">🧪 Test AI (10 games, no learning)</button>
+<p id="status" class="mono">AI has learned nothing yet (ε = 1: every move is random).</p></div>
+<div class="card"><h2>Controls</h2><button id="bpause" class="w">⏸ Pause</button><button id="brest">↺ Restart game</button><button id="breset" class="w">🗑 Reset training</button>
+<h2 style="margin-top:12px">🏆 Rewards (edit them!)</h2><div id="rews"></div><small>Changing a reward clears replay memory (old memories used the old rule). Try making bounces worth 0 or losing a life worth 0 and watch the behaviour change.</small></div>
+</div>
+<div class="grid"><div class="card"><h2>⚙️ AI parameters</h2><div id="params"></div></div>
+<div class="card"><h2>📊 Live training statistics</h2><div class="tiles" id="tiles"></div><div class="mono" id="cmp"></div></div></div>
+<div class="card" style="margin-bottom:12px"><div class="charts"><canvas id="c1" width="320" height="140"></canvas><canvas id="c2" width="320" height="140"></canvas><canvas id="c3" width="320" height="140"></canvas><canvas id="c4" width="320" height="140"></canvas><canvas id="c5" width="320" height="140"></canvas></div></div>
+<div class="grid"><div class="card"><h2>🧮 Show the Math</h2><label><input type="checkbox" id="mchk"> Show a Bellman example from a real training batch</label> <button class="s" id="mnew">Pick another experience</button><div class="mono" id="math">Tick the box, then train for a moment.</div></div>
+<div class="card"><h2>Q-Learning vs Deep Q-Learning</h2><table><tr><th>Q-Learning</th><th>Deep Q-Learning</th></tr><tr><td>Stores one number per (state, action) in a <b>table</b>.</td><td>A <b>neural network</b> guesses Q-values from the state numbers.</td></tr><tr><td>Fine for a tiny maze with 50 squares.</td><td>Needed here: ball position and speed are continuous, so there are endless possible states.</td></tr><tr><td>Cannot guess for states it never visited.</td><td>Generalises: similar states give similar Q-values.</td></tr></table>
+<small>Q(s,a) = “how much total future reward do I expect if I do action a now, then play well?” Target: y = r + γ · max Q′(s′, a′). The network is nudged so its guess moves toward y.</small></div></div>
+<div class="card"><h2>🤔 Think about it</h2>
+<details><summary>Why does the AI perform poorly at the beginning?</summary>Its network weights are random, so its Q-values mean nothing, and ε is high so it mostly moves randomly. <i>Deeper: replay memory is also nearly empty, so there is little to learn from. With random weights the three Q-values are almost identical, so the greedy choice is basically arbitrary. Training only starts once memory holds at least 64 experiences.</i></details>
+<details><summary>How does the AI learn to follow the ball?</summary>When the paddle meets the ball it earns +0.1, and not missing avoids −2. Through the Bellman target those rewards flow backwards to earlier states, so “ball is right of paddle → go RIGHT” gets a higher Q-value. Watch the input “ball−paddle” light up the network.<br><i>Deeper: the network is never told the rule “follow the ball”. It only gets numbers and rewards. Following the ball is the pattern that happens to earn the most reward, so gradient descent discovers it. Watch the Q-value of LEFT vs RIGHT flip as the ball crosses the paddle’s centre.</i></details>
+<details><summary>What happens when exploration (ε) is set to zero?</summary>The AI only repeats what it currently believes. At the very start it believes nothing useful, so it may get stuck doing one move. Exploration lets it discover better actions.<br><i>Deeper: try it. Train 100 episodes, then drag ε to 0 and press Watch &amp; learn. Compare with a fresh Reset Training at ε = 0. A trained network still plays well, an untrained one does not. This is the exploration–exploitation trade-off.</i></details>
+<details><summary>Why does the AI still make mistakes after training?</summary>The network is only an approximation, training is noisy, and some ball angles are rarely seen. During training it also keeps exploring randomly; use “Test AI” to see its greedy play.<br><i>Deeper: Q-values are estimates of the future, learned from limited data. Two nearly identical states can get slightly different Q-values, and a small error can flip which action looks best.</i></details>
+<details><summary>What happens if the reward system changes?</summary>The AI chases whatever you reward. If bounces pay more than bricks, it may just keep the ball alive. If losing a life costs nothing, it stops caring about misses.<br><i>Deeper: this is called reward shaping. The AI is not learning “play Breakout well”, it is learning “maximise this exact score”. Designing rewards that match what you really want is a major challenge in reinforcement learning.</i></details>
+<details><summary>How is Deep Q-Learning different from ordinary Q-Learning?</summary>See the table above: a neural network replaces the Q-table, plus tricks like replay memory and a target network keep training stable.<br><i>Deeper: with a table you update one cell. With a network, one update changes the weights for every state at once, which can make learning wobble. That is why the tricks below exist.</i></details><details><summary>Why use a replay memory?</summary>Consecutive game frames are almost identical, and learning from them in order makes the network forget older situations. Sampling random old experiences mixes easy and hard moments, like shuffling flash cards. <i>Deeper: it also lets each experience be reused many times, and it is why your own Round 1 experiences can teach the AI.</i></details><details><summary>Why a separate target network?</summary>The target y = r + γ·max Q′ uses the network’s own guesses. If that same network is changing every step, the target keeps moving, like chasing your own shadow. A frozen copy, updated every N steps, holds the target still for a while. <i>Deeper: try a target update of 100 vs 2000 and compare how smooth the loss chart looks.</i></details></div>
+<script>
+const $=id=>document.getElementById(id),W=400,H=300,PW=64,PY=H-16,BR=5,ACT=["LEFT","STAY","RIGHT"],f2=x=>(+x).toFixed(2);
+const P={lr:.002,gamma:.95,eps:1,decay:.985,mem:5000,batch:32,tgt:500,speed:1},RW={brick:1,bounce:.1,lose:-2,clear:10};
+let G,HL=true,mem=[],memI=0,model,tnet,opt,S,tsteps=0,lastQ=[0,0,0],lastA=1,lastX=false,lastObs=null,mathS=null,wantMath=true,WC=null,wcT=0,pops=[],lossAcc=[],humanBuf=[],hlog=[],hl=0;
+let mode="ai",paused=false,busy=false,run={kind:null,learn:true,left:0,total:0},acc=0,last=performance.now(),fr=0;const keys={l:0,r:0},litUntil=Array(9).fill(0);
+function newGame(){G={px:W/2,bricks:Array(40).fill(1),lives:3,left:40,steps:0,ret:0,destroyed:0};launch()}
+function launch(){G.bx=G.px;G.by=H-60;G.vx=(Math.random()<.5?-1:1)*(1+Math.random()*2);G.vy=-3.2}
+const obs=()=>[G.bx/W,G.by/H,G.vx/4,G.vy/4,G.px/W,(G.bx-G.px)/W,G.left/40,G.lives/3];
+function step(a){G.px=Math.max(PW/2,Math.min(W-PW/2,G.px+(a-1)*7));let r=0,done=false,ev=null;G.bx+=G.vx;G.by+=G.vy;
+if(G.bx<BR){G.bx=BR;G.vx=Math.abs(G.vx)}if(G.bx>W-BR){G.bx=W-BR;G.vx=-Math.abs(G.vx)}if(G.by<BR){G.by=BR;G.vy=Math.abs(G.vy)}
+const c=Math.floor((G.bx-12)/47),rw=Math.floor((G.by-30)/17);
+if(c>=0&&c<8&&rw>=0&&rw<5&&G.bricks[rw*8+c]&&(G.bx-12)%47<44&&(G.by-30)%17<14){G.bricks[rw*8+c]=0;G.left--;G.destroyed++;G.vy=-G.vy;r+=RW.brick;ev="brick"}
+if(G.vy>0&&G.by+BR>=PY&&G.by-BR<=PY+8&&Math.abs(G.bx-G.px)<=PW/2+BR){G.vy=-3.2;let v=(G.bx-G.px)/(PW/2)*4;if(Math.abs(v)<.6)v=v<0?-.6:.6;G.vx=Math.max(-4,Math.min(4,v));G.by=PY-BR;r+=RW.bounce;ev=ev||"bounce"}
+else if(G.by>H+BR){G.lives--;r+=RW.lose;ev="life";if(G.lives<=0)done=true;else launch()}
+if(G.left==0){r+=RW.clear;done=true;ev="clear"}
+G.steps++;G.ret+=r;if(G.steps>=2500)done=true;
+if(HL&&ev){const t={brick:["+"+RW.brick,"#fbbf24"],bounce:["+"+RW.bounce,"#22d3ee"],life:[""+RW.lose,"#f43f5e"],clear:["+"+RW.clear,"#34d399"]}[ev];pops.push({x:G.bx,y:Math.min(G.by,H-30),t:t[0],c:t[1],l:40})}
+return{r,done,ev}}
+// ---- DQN ----
+function mk(){const m=tf.sequential();m.add(tf.layers.dense({units:24,activation:"relu",inputShape:[8],kernelInitializer:"heNormal"}));m.add(tf.layers.dense({units:24,activation:"relu",kernelInitializer:"heNormal"}));m.add(tf.layers.dense({units:3}));return m}
+function setOpt(){try{opt&&opt.dispose()}catch(e){}opt=tf.train.adam(P.lr)}
+function initNet(){if(model){model.dispose();tnet.dispose()}model=mk();tnet=mk();tnet.setWeights(model.getWeights());setOpt();mem=[];memI=0;tsteps=0;P.eps=1;mathS=null;wantMath=true;lossAcc=[];S={rew:[],bricks:[],dur:[],eps:[],loss:[],test:[]};WC=null}
+function qv(s){let o;tf.tidy(()=>{o=Array.from(model.predict(tf.tensor2d([s])).dataSync())});return o}
+function push(e){if(mem.length<P.mem)mem.push(e);else{mem[memI%mem.length]=e;memI++}}
+function learnBatch(){const n=Math.min(P.batch,mem.length),B=[];for(let i=0;i<n;i++)B.push(mem[Math.random()*mem.length|0]);let l=0;
+tf.tidy(()=>{const Sx=tf.tensor2d(B.map(e=>e.s)),S2=tf.tensor2d(B.map(e=>e.s2)),A=tf.tensor1d(B.map(e=>e.a),"int32"),R=tf.tensor1d(B.map(e=>e.r)),Nd=tf.tensor1d(B.map(e=>e.d?0:1));
+const y=R.add(tnet.predict(S2).max(1).mul(Nd).mul(P.gamma)),oh=tf.oneHot(A,3).cast("float32");
+if(wantMath&&$("mchk").checked){const q0=Array.from(model.predict(Sx.slice([0,0],[1,8])).dataSync()),qn=Array.from(tnet.predict(S2.slice([0,0],[1,8])).dataSync());const e=B[0],mx=Math.max(...qn),yy=e.r+(e.d?0:P.gamma*mx),er=yy-q0[e.a];mathS={e,q0,qn,mx,yy,er,loss:Math.abs(er)<=1?.5*er*er:Math.abs(er)-.5};wantMath=false}
+l=opt.minimize(()=>tf.losses.huberLoss(y,model.predict(Sx).mul(oh).sum(1)),true).dataSync()[0]});lossAcc.push(l)}
+function decide(learn,fast){const s=obs(),ex=learn&&Math.random()<P.eps;const q=(ex&&fast)?lastQ:qv(s);const a=ex?Math.floor(Math.random()*3):q.indexOf(Math.max(...q));lastQ=q;lastA=a;lastX=ex;lastObs=s;return{s,a}}
+function commit(s,a,learn,fast){const o=step(a),s2=obs(),now=performance.now();let tr=0,tg=0;
+if(learn){push({s,a,r:o.r,s2,d:o.done});tsteps++;if(mem.length>=Math.max(P.batch*2,64)&&tsteps%4==0){learnBatch();tr=1}if(tsteps%P.tgt==0){tnet.setWeights(model.getWeights());tg=1}}
+if(!fast){for(let i=0;i<6;i++)litUntil[i]=now+140;if(tr)litUntil[6]=now+350;if(tg)litUntil[7]=now+800;if(o.done)litUntil[8]=now+600}
+if(o.done)endEp(learn);return{o,tr,tg}}
+function endEp(learn){if(learn){S.rew.push(G.ret);S.bricks.push(G.destroyed);S.dur.push(G.steps);S.eps.push(P.eps);S.loss.push(lossAcc.length?lossAcc.reduce((a,b)=>a+b)/lossAcc.length:0);lossAcc=[];P.eps=Math.max(.02,P.eps*P.decay)}else S.test.push(G.ret);
+newGame();if(run.kind&&--run.left<=0)run.kind=null}
+const agentStep=(learn,fast)=>{const d=decide(learn,fast);return commit(d.s,d.a,learn,fast)};
+// ---- UI helpers ----
+const NAMES=["1 Observe state","2 Predict Q-values","3 ε-greedy choice","4 Act","5 Get reward","6 Store in memory","7 Train network","8 Update target net","9 Repeat"];
+$("pipe").innerHTML=NAMES.map(n=>`<span>${n}</span>`).join("");const chips=[...$("pipe").children];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function narrate(){if(busy)return;busy=true;run.kind=null;const lt=i=>{litUntil[i]=performance.now()+700},T=t=>$("narr").textContent=t;HL=true;
+const s=obs();lt(0);T("1 OBSERVE: the game gives the network 8 numbers:\n["+s.map(f2).join(", ")+"]");await sleep(900);
+const d=decide(true,false);lt(1);T("2 PREDICT: the network outputs Q-values\nLEFT "+f2(lastQ[0])+" | STAY "+f2(lastQ[1])+" | RIGHT "+f2(lastQ[2]));await sleep(1000);
+lt(2);T("3 CHOOSE: ε = "+f2(P.eps)+". Dice said "+(lastX?"EXPLORE, so a random move: ":"EXPLOIT, so the best Q-value: ")+ACT[d.a]);await sleep(1000);
+lt(3);const c=commit(d.s,d.a,true,false);T("4 ACT: paddle does "+ACT[d.a]+" and the ball moves one step.");await sleep(800);
+lt(4);T("5 REWARD: "+(c.o.ev?c.o.ev+" → ":"nothing special → ")+f2(c.o.r));await sleep(800);
+lt(5);T("6 STORE: (state, action, reward, next state, done) saved. Replay memory: "+mem.length+"/"+P.mem);await sleep(800);
+lt(6);T(c.tr?"7 TRAIN: a random mini-batch of "+Math.min(P.batch,mem.length)+" old experiences nudged the network weights.":"7 TRAIN: it trains every 4th step once memory has enough data (not this step).");await sleep(900);
+lt(7);T((c.tg?"8 TARGET NET: copied the weights now.":"8 TARGET NET: copied every "+P.tgt+" steps. Next copy in "+(P.tgt-tsteps%P.tgt)+" steps.")+"\n9 REPEAT: press Step again!");busy=false}
+function setStatus(t){$("status").textContent=t}
+function startRun(kind,learn,n,msg){if(mode!=="ai")return;paused=false;$("bpause").textContent="⏸ Pause";run={kind,learn,left:n,total:n};newGame();run.msg=msg}
+$("bwatch").onclick=()=>startRun("live",true,Infinity,"Watching and learning continuously…");
+$("b1g").onclick=()=>startRun("live",true,1,"Watching one game (still learning)…");
+$("b100").onclick=()=>startRun("fast",true,100,"Training 100 episodes…");$("b1000").onclick=()=>startRun("fast",true,1000,"Training 1000 episodes…");
+$("btest").onclick=()=>{S.test=[];startRun("live",false,10,"Testing: ε = 0, no learning. The AI plays its best.")};
+$("bstep").onclick=narrate;
+$("bpause").onclick=()=>{paused=!paused;$("bpause").textContent=paused?"▶ Resume":"⏸ Pause"};
+$("brest").onclick=()=>{newGame();pops=[]};
+$("breset").onclick=()=>{run.kind=null;initNet();newGame();setStatus("Training reset. The AI knows nothing again (ε = 1).");buildParams()};
+function setMode(m){mode=m;run.kind=null;$("m1").classList.toggle("on",m=="human");$("m2").classList.toggle("on",m=="ai");$("r1").style.display=m=="human"?"":"none";$("r2").style.display=m=="ai"?"":"none";newGame()}
+$("m1").onclick=()=>setMode("human");$("m2").onclick=()=>setMode("ai");
+addEventListener("keydown",e=>{if(e.key=="ArrowLeft"){keys.l=1;e.preventDefault()}if(e.key=="ArrowRight"){keys.r=1;e.preventDefault()}});
+addEventListener("keyup",e=>{if(e.key=="ArrowLeft")keys.l=0;if(e.key=="ArrowRight")keys.r=0});
+function humanStep(){const s=obs(),a=keys.r?2:keys.l?0:1,o=step(a),s2=obs();humanBuf.push({s,a,r:o.r,s2,d:o.done});if(humanBuf.length>5000)humanBuf.shift();
+if(o.r!==0||++hl%20==0)hlog.push(`obs=[${s.map(f2).join(",")}]  action=${ACT[a]}  reward=${o.r>0?"+":""}${f2(o.r)}${o.ev?"  ("+o.ev+")":""}`);if(hlog.length>8)hlog.shift();$("log").textContent=hlog.join("\n")||"…";if(o.done)newGame()}
+$("teach").onclick=()=>{if(humanBuf.length<64){$("tmsg").textContent="Play a bit longer first (need 64+ experiences).";return}humanBuf.forEach(push);for(let i=0;i<300;i++)learnBatch();tnet.setWeights(model.getWeights());$("tmsg").textContent=`Added ${humanBuf.length} of your experiences to replay memory and trained 300 batches. Now go to Round 2 and press “Test AI”.`;humanBuf=[]};
+// params
+const DEFS=[["lr","Learning rate",.0005,.01,.0005,"How big each weight nudge is. Too small = slow learning; too big = unstable, jumpy learning."],["gamma","Discount factor γ",.5,.99,.01,"How much the AI cares about future rewards. Near 1 = patient planner; low = short-sighted."],["eps","Exploration rate ε",0,1,.01,"Chance of a random move. It shrinks automatically during training; set it to 0 to see what happens without exploring."],["decay","Exploration decay",.95,.999,.001,"ε is multiplied by this after every episode. Closer to 1 = explores for longer."],["mem","Replay memory size",500,20000,500,"How many past experiences are kept for learning. Old ones are overwritten."],["batch","Training batch size",8,128,8,"How many random memories are studied per training step."],["tgt","Target update every (steps)",100,2000,100,"How often the frozen “target network” copies the main network. Slower updates = steadier targets."],["speed","Game speed (×)",1,30,1,"Steps per screen frame when watching live. “Train 100/1000” always runs as fast as the browser allows."]];
+function buildParams(){$("params").innerHTML=DEFS.map(d=>`<div class="par"><label>${d[1]} <b id="v_${d[0]}"></b></label><input type="range" id="p_${d[0]}" min="${d[2]}" max="${d[3]}" step="${d[4]}" value="${P[d[0]]}"><small>${d[5]}</small></div>`).join("");
+DEFS.forEach(d=>{const el=$("p_"+d[0]);el.oninput=()=>{P[d[0]]=+el.value;if(d[0]=="lr")setOpt();if(d[0]=="mem"&&mem.length>P.mem){mem=mem.slice(-P.mem);memI=0}};})}
+$("rews").innerHTML=[["brick","Destroy a brick"],["bounce","Paddle bounce"],["lose","Lose a life"],["clear","Clear all bricks"]].map(r=>`<div>${r[1]}: <input type="number" step="0.1" id="rw_${r[0]}" value="${RW[r[0]]}"></div>`).join("");
+Object.keys(RW).forEach(k=>$("rw_"+k).oninput=e=>{RW[k]=+e.target.value||0;mem=[];memI=0});
+$("mnew").onclick=()=>{wantMath=true};
+// ---- drawing ----
+const HUES=[340,25,50,150,200];
+function drawGame(){const x=$("gc").getContext("2d");x.fillStyle="#0b0e24";x.fillRect(0,0,W,H);
+for(let i=0;i<40;i++)if(G.bricks[i]){x.fillStyle=`hsl(${HUES[i>>3]},80%,60%)`;x.fillRect(12+(i%8)*47,30+(i>>3)*17,44,14)}
+x.fillStyle="#7c5cff";x.fillRect(G.px-PW/2,PY,PW,8);x.fillStyle="#fff";x.beginPath();x.arc(G.bx,G.by,BR,0,7);x.fill();
+x.fillStyle="#9aa3d6";x.font="12px sans-serif";x.fillText("Score "+f2(G.ret)+"   Lives "+"♥".repeat(Math.max(0,G.lives)),8,16);
+x.font="bold 14px sans-serif";pops=pops.filter(p=>p.l-->0);pops.forEach(p=>{x.fillStyle=p.c;x.fillText(p.t,p.x+8,p.y-(40-p.l)*.6)})}
+function refreshW(){WC=model.getWeights().map(t=>t.dataSync())}
+function fwd(s){const k1=WC[0],b1=WC[1],k2=WC[2],b2=WC[3],k3=WC[4],b3=WC[5],h1=[],h2=[],o=[];for(let j=0;j<24;j++){let v=b1[j];for(let i=0;i<8;i++)v+=s[i]*k1[i*24+j];h1.push(Math.max(0,v))}
+for(let j=0;j<24;j++){let v=b2[j];for(let i=0;i<24;i++)v+=h1[i]*k2[i*24+j];h2.push(Math.max(0,v))}for(let j=0;j<3;j++){let v=b3[j];for(let i=0;i<24;i++)v+=h2[i]*k3[i*3+j];o.push(v)}return[s,h1.slice(0,16),h2.slice(0,16),o]}
+function drawNet(){if(!WC||fr-wcT>8){refreshW();wcT=fr}const x=$("nc").getContext("2d"),L=fwd(lastObs||obs()),X=[100,240,380,505],cnt=[8,16,16,3];x.fillStyle="#0b0e24";x.fillRect(0,0,600,290);
+const pos=cnt.map((n,l)=>Array.from({length:n},(_,i)=>[X[l],20+(i+.5)*(250/n)]));
+const KS=[[WC[0],24],[WC[2],24],[WC[4],3]];
+for(let l=0;l<3;l++)for(let i=0;i<cnt[l];i++)for(let j=0;j<cnt[l+1];j++){const w=KS[l][0][i*KS[l][1]+j];x.strokeStyle=w>0?"#34d399":"#f43f5e";x.globalAlpha=Math.min(.7,Math.abs(w)*.8);x.beginPath();x.moveTo(...pos[l][i]);x.lineTo(...pos[l+1][j]);x.stroke()}
+x.globalAlpha=1;x.font="11px sans-serif";const IN=["ball x","ball y","ball vx","ball vy","paddle x","ball−paddle","bricks left","lives"];
+for(let l=0;l<4;l++)pos[l].forEach((p,i)=>{const v=L[l][i],br=Math.min(1,Math.abs(v)/(l?2:1));const ch=l==3&&i==lastA;x.fillStyle=l==3?(ch?"#fbbf24":"#7c5cff"):`rgba(34,211,238,${.15+.85*br})`;x.beginPath();x.arc(p[0],p[1],ch?14:l==3?11:6,0,7);x.fill();x.strokeStyle=ch?"#fff":"#2e3566";x.lineWidth=ch?3:1;x.stroke();x.lineWidth=1;
+x.fillStyle="#cfd4ff";if(l==0){x.textAlign="right";x.fillText(IN[i],p[0]-14,p[1]+4)}if(l==3){x.textAlign="left";x.fillStyle=ch?"#fbbf24":"#cfd4ff";x.font=ch?"bold 12px sans-serif":"11px sans-serif";x.fillText(ACT[i]+"  Q="+f2(L[3][i]),p[0]+18,p[1]+4);x.font="11px sans-serif"}});
+x.textAlign="center";x.fillStyle="#9aa3d6";["Input (state)","Hidden 1","Hidden 2","Output Q-values"].forEach((t,i)=>x.fillText(t,X[i],12));x.textAlign="left";
+if(lastX){x.fillStyle="#f43f5e";x.fillText("🎲 random (exploring)",400,282)}else{x.fillStyle="#34d399";x.fillText("🎯 best Q (exploiting)",400,282)}}
+function chart(id,title,ss){const c=$(id),x=c.getContext("2d"),w=c.width,h=c.height;x.fillStyle="#0b0e24";x.fillRect(0,0,w,h);x.fillStyle="#cfd4ff";x.font="12px sans-serif";x.fillText(title,8,14);
+const D=ss.map(s=>s.d.slice(-400)),all=D.flat();if(!all.length)return;let lo=Math.min(...all),hi=Math.max(...all);if(hi==lo)hi=lo+1;x.fillStyle="#9aa3d6";x.font="10px sans-serif";x.fillText(f2(hi),w-40,26);x.fillText(f2(lo),w-40,h-6);
+D.forEach((d,k)=>{x.strokeStyle=ss[k].c;x.lineWidth=ss[k].w||1.5;x.beginPath();d.forEach((v,i)=>{const px=8+i*(w-56)/Math.max(1,d.length-1),py=h-10-(v-lo)/(hi-lo)*(h-40);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()})}
+const mean=a=>a.length?a.reduce((p,q)=>p+q,0)/a.length:0;
+function stats(){const R=S.rew,ma=R.map((_,i)=>mean(R.slice(Math.max(0,i-19),i+1)));
+$("tiles").innerHTML=[["Episodes",R.length],["Last reward",f2(R[R.length-1]||0)],["Moving avg (20)",f2(ma[ma.length-1]||0)],["Bricks (last)",S.bricks[S.bricks.length-1]||0],["Epsilon ε",f2(P.eps)],["Memory",mem.length+"/"+P.mem],["Train steps",tsteps],["Loss (last ep.)",f2(S.loss[S.loss.length-1]||0)]].map(t=>`<div>${t[0]}<b>${t[1]}</b></div>`).join("");
+$("cmp").textContent="Before training (first 10 episodes): avg reward "+(R.length?f2(mean(R.slice(0,10))):"–")+"\nLatest 10 training episodes: avg reward "+(R.length>10?f2(mean(R.slice(-10))):"–")+"\nTest games (ε=0, no learning): avg reward "+(S.test.length?f2(mean(S.test))+" over "+S.test.length+" games":"– (press Test AI)");
+chart("c1","Reward per episode (blue) & moving avg (yellow)",[{d:R,c:"#22d3ee",w:1},{d:ma,c:"#fbbf24",w:2}]);chart("c2","Bricks destroyed",[{d:S.bricks,c:"#f43f5e"}]);chart("c3","Episode duration (steps)",[{d:S.dur,c:"#34d399"}]);chart("c4","Exploration rate ε",[{d:S.eps,c:"#7c5cff"}]);chart("c5","Training loss",[{d:S.loss,c:"#fb923c"}]);
+const e=$("p_eps");if(e&&document.activeElement!==e)e.value=P.eps;const v=$("v_eps");DEFS.forEach(d=>{$("v_"+d[0]).textContent=d[0]=="eps"?f2(P.eps):P[d[0]]});
+if(run.kind)setStatus((run.msg||"")+(run.total>1&&run.total<1e9?"  Episode "+(run.total-run.left+1)+"/"+run.total:""));else if(mode=="ai"&&!busy&&R.length)setStatus("Idle. "+R.length+" training episodes so far. Try “Test AI” to see what it learned.");
+const m=mathS;$("math").textContent=!$("mchk").checked?"Tick the box above.":!m?"Waiting for the first training batch…":
+`Experience from replay memory:\n  state s = [${m.e.s.map(f2).join(", ")}]\n  action a = ${ACT[m.e.a]}, reward r = ${f2(m.e.r)}, episode over? ${m.e.d}\n\nMain network Q(s,·)   = [${m.q0.map(f2).join(", ")}]\n  prediction for chosen action: Q(s,a) = ${f2(m.q0[m.e.a])}\nTarget network Q′(s′,·) = [${m.qn.map(f2).join(", ")}]  → max = ${f2(m.mx)}\n\nBellman target  y = r + γ · max Q′(s′,a′)\n  y = ${f2(m.e.r)} + ${P.gamma} × ${m.e.d?"0 (game over)":f2(m.mx)} = ${f2(m.yy)}\nPrediction error = y − Q(s,a) = ${f2(m.yy)} − ${f2(m.q0[m.e.a])} = ${f2(m.er)}\nHuber loss = ${f2(m.loss)}   (½e² if |e|≤1, else |e|−½)\nTraining nudges Q(s,${ACT[m.e.a]}) towards ${f2(m.yy)}.`}
+function loop(){const now=performance.now();acc+=Math.min(now-last,50);last=now;const n=Math.floor(acc/16.67);acc-=n*16.67;fr++;
+if(!paused&&!busy){if(mode=="human"){HL=true;for(let i=0;i<n;i++)humanStep()}else if(run.kind=="live"){HL=true;for(let i=0;i<n*P.speed&&run.kind=="live";i++)agentStep(run.learn,false)}else if(run.kind=="fast"){HL=false;const t0=performance.now();while(run.kind=="fast"&&performance.now()-t0<12)agentStep(true,true);HL=true}}
+chips.forEach((c,i)=>c.classList.toggle("on",now<litUntil[i]));drawGame();drawNet();if(fr%10==0)stats();
+const g=G;$("st").textContent=`Ball (${g.bx.toFixed(0)}, ${g.by.toFixed(0)})  velocity (${f2(g.vx)}, ${f2(g.vy)})\nPaddle x ${g.px.toFixed(0)}  Bricks left ${g.left}  Lives ${g.lives}\nAI last action: ${mode=="ai"?ACT[lastA]+(lastX?" (random)":" (from Q)"):"you!"}`;
+requestAnimationFrame(loop)}
+(async()=>{try{await tf.setBackend("cpu");await tf.ready()}catch(e){}initNet();newGame();buildParams();lastObs=obs();loop()})();
+</script></body></html>
